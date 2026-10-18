@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Platform</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14171c;--mu:#6b7280;--bd:#e3e6ea;--ac:#4f46e5;--ok:#16a34a;--er:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--tx:#e8eaee;--mu:#8b93a1;--bd:#272b33;--ac:#818cf8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif;padding:12px;max-width:900px;margin:auto}
+nav{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px}nav button{flex:none}
+button,input,select,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 10px}
+button{cursor:pointer}button.on,button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button.d{color:var(--er)}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px}
+input,select,textarea{width:100%;margin:4px 0 8px}h3{margin:0 0 8px}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.n{font-size:22px;font-weight:600}.mu{color:var(--mu);font-size:12px}pre{background:var(--bg);padding:10px;border-radius:8px;overflow:auto;font-size:12px;margin:4px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--bd)}
+.er{color:var(--er)}.ok{color:var(--ok)}canvas{width:100%;height:140px}section{display:none}section.on{display:block}.sc{overflow-x:auto}
+</style></head><body>
+<nav id="nav"></nav>
+
+<section id="s0" class="on">
+ <div class="g"><div class="c"><div class="n" id="t1">0</div><div class="mu">Requests</div></div><div class="c"><div class="n er" id="t2">0</div><div class="mu">Errors</div></div><div class="c"><div class="n" id="t3">0</div><div class="mu">Avg ms</div></div></div>
+ <div class="c"><h3>Last 24h</h3><canvas id="ch"></canvas><div class="mu"><span class="ok">■</span> success &nbsp;<span class="er">■</span> error</div></div>
+ <div class="c"><h3>Per model</h3><div id="per"></div></div>
+ <div class="c"><h3>Recent requests &amp; errors</h3><div class="sc" id="logs"></div></div>
+</section>
+
+<section id="s1">
+ <div class="c"><h3>Add Gemini key</h3><input id="gl" placeholder="Label (e.g. Key 1)"><input id="gk" placeholder="AIza..."><button class="p" onclick="addG()">Save</button></div>
+ <div class="c"><h3>Stored keys</h3><div id="gl2"></div></div>
+</section>
+
+<section id="s2">
+ <div class="c"><h3>Create API key</h3>
+  <label class="mu">Model name (shown to callers)</label><input id="kn" placeholder="e.g. Nova-1">
+  <label class="mu">Engine</label><select id="km"><option>gemini-2.5-flash</option><option>gemini-2.5-flash-lite</option><option>gemini-2.0-flash</option><option>gemini-2.5-pro</option></select>
+  <label class="mu">System prompt (persona / rules)</label><textarea id="ks" rows="3" placeholder="You are a helpful WhatsApp assistant. Reply in Sinhala."></textarea>
+  <div class="g"><div><label class="mu">Temp</label><input id="kt" value="0.7"></div><div><label class="mu">Max tokens</label><input id="kx" value="1024"></div><div><label class="mu">Req/min</label><input id="kr" value="60"></div></div>
+  <label class="mu">Use these Gemini keys (none = all, auto-rotate)</label><div id="kp"></div>
+  <button class="p" onclick="addK()">Create</button></div>
+ <div id="kl"></div>
+</section>
+
+<section id="s3"><div id="setup"></div></section>
+
+<script>
+const $=s=>document.querySelector(s),E=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let P=sessionStorage.p||prompt('Admin password');sessionStorage.p=P;let D={gemini:[],keys:[]};
+const api=(m,u,b)=>fetch('/admin'+u,{method:m,headers:{'x-admin':P,'content-type':'application/json'},body:b&&JSON.stringify(b)}).then(r=>{if(r.status==401){sessionStorage.clear();location.reload()}return r.json()});
+['Overview','Gemini keys','API keys','Setup'].forEach((t,i)=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>show(i);$('#nav').append(b)});
+function show(i){document.querySelectorAll('section').forEach((s,j)=>s.classList.toggle('on',i==j));[...$('#nav').children].forEach((b,j)=>b.classList.toggle('on',i==j));if(i==0)stats()}
+async function load(){D=await api('GET','/data');
+ $('#gl2').innerHTML=D.gemini.map(g=>`<div class="row"><span>${E(g.label)} <span class="mu">${E(g.key)}</span></span><button class="d" onclick="api('DELETE','/gemini/${g.id}').then(load)">Delete</button></div>`).join('')||'<div class="mu">No keys yet</div>';
+ $('#kp').innerHTML=D.gemini.map(g=>`<label><input type="checkbox" style="width:auto" value="${g.id}"> ${E(g.label)}</label><br>`).join('');
+ $('#kl').innerHTML=D.keys.map(k=>`<div class="c"><b>${E(k.name)}</b> <span class="mu">${E(k.model)}</span><pre>${E(k.key)}</pre>
+  <button onclick="api('PATCH','/keys/${k.id}',{active:${!k.active}}).then(load)">${k.active?'Disable':'Enable'}</button>
+  <button class="d" onclick="confirm('Delete?')&&api('DELETE','/keys/${k.id}').then(load)">Delete</button></div>`).join('');
+ setup()}
+async function addG(){await api('POST','/gemini',{label:$('#gl').value,key:$('#gk').value});$('#gk').value='';load()}
+async function addK(){const pool=[...document.querySelectorAll('#kp input:checked')].map(i=>i.value);
+ await api('POST','/keys',{name:$('#kn').value,model:$('#km').value,system:$('#ks').value,temp:$('#kt').value,maxTokens:$('#kx').value,rpm:$('#kr').value,pool});$('#kn').value='';load();show(3)}
+function setup(){const u=location.origin;$('#setup').innerHTML=D.keys.map(k=>`<div class="c"><h3>${E(k.name)}</h3>
+<div class="mu">cURL</div><pre>curl ${u}/v1/chat \\
+  -H "Authorization: Bearer ${k.key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"message":"Hello","session":"94771234567"}'</pre>
+<div class="mu">Response</div><pre>{"model":"${E(k.name)}","reply":"Hi! How can I help?","choices":[...],"usage":{...},"latency_ms":420}</pre>
+<div class="mu">WhatsApp bot (whatsapp-web.js / Baileys)</div><pre>const r = await fetch("${u}/v1/chat", {method:"POST",
+ headers:{Authorization:"Bearer ${k.key}","Content-Type":"application/json"},
+ body: JSON.stringify({message: msg.body, session: msg.from})});
+const {reply} = await r.json(); msg.reply(reply);</pre>
+<div class="mu">OpenAI-compatible: base_url = ${u}/v1 , model = "${E(k.name)}"</div>
+<div class="mu">Errors: {"error":{"message","type","model"}} with HTTP 401 / 403 / 429 / 502 / 503</div></div>`).join('')||'<div class="mu">Create an API key first</div>'}
+async function stats(){const s=await api('GET','/stats');$('#t1').textContent=s.total;$('#t2').textContent=s.errors;$('#t3').textContent=s.avg;
+ $('#per').innerHTML=Object.entries(s.per).map(([k,p])=>`<div class="row"><b>${E(k)}</b><span>${p.req} req · <span class="er">${p.err} err</span> · ${Math.round(p.ms/p.req)}ms</span></div>`).join('')||'<div class="mu">No traffic yet</div>';
+ $('#logs').innerHTML='<table style="width:100%;font-size:12px">'+s.recent.map(l=>`<tr><td>${new Date(l.t).toLocaleTimeString()}</td><td>${E(l.key)}</td><td class="${l.ok?'ok':'er'}">${l.status}</td><td>${l.ms}ms</td><td class="er">${E(l.err||'')}</td></tr>`).join('')+'</table>';
+ const c=$('#ch'),r=devicePixelRatio||1,w=c.width=c.clientWidth*r,h=c.height=c.clientHeight*r,x=c.getContext('2d');x.clearRect(0,0,w,h);
+ const m=Math.max(1,...s.hours.map(a=>a.ok+a.err)),bw=w/24;
+ s.hours.forEach((a,i)=>{const oh=a.ok/m*(h-6*r),eh=a.err/m*(h-6*r);x.fillStyle='#16a34a';x.fillRect(i*bw+2,h-oh,bw-4,oh);x.fillStyle='#dc2626';x.fillRect(i*bw+2,h-oh-eh,bw-4,eh)})}
+show(0);load();setInterval(()=>$('#s0').classList.contains('on')&&stats(),5000);
+</script></body></html>
